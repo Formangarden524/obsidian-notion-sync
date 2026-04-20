@@ -223,6 +223,58 @@ crontab -e
 
 ---
 
+## 支持的 Block 类型
+
+### Notion → Obsidian
+
+| Notion Block | Markdown 输出 | 说明 |
+|-------------|--------------|------|
+| paragraph | 普通文本 | 支持内联格式 |
+| heading_1/2/3 | `#` / `##` / `###` | |
+| bulleted_list_item | `- ` | **支持嵌套子项** |
+| numbered_list_item | `1. ` | **支持嵌套子项** |
+| to_do | `- [ ]` / `- [x]` | **支持嵌套子项** |
+| quote | `> ` | **支持嵌套子项** |
+| code | ` ```language ` | 保留语言标识 |
+| divider | `---` | |
+| image | `![caption](url)` | 使用 Notion 临时 URL |
+| callout | `> 💡 ` | 转为引用块 |
+| toggle | `<details>` | HTML 折叠 |
+| table | Markdown 表格 | |
+| equation | `$$expr$$` | 块级公式 |
+| column_list | `<!-- column_list -->` | 分栏标记 |
+| embed | `[Embed: url]` | |
+| video | `[Video: url]` | |
+| file | `[File: name]` | |
+| pdf | `[PDF](url)` | |
+| link_preview | `[Link Preview](url)` | |
+| bookmark | `[Bookmark](url)` | |
+| link_to_page | `[Linked Page](url)` | |
+
+### Obsidian → Notion
+
+| Markdown 语法 | Notion Block | 说明 |
+|--------------|-------------|------|
+| `#` / `##` / `###` | heading_1/2/3 | |
+| `- ` / `* ` | bulleted_list_item | |
+| `1. ` | numbered_list_item | |
+| `- [ ]` / `- [x]` | to_do | |
+| `> ` | quote | |
+| ` ```lang ` | code | 保留语言 |
+| `---` / `***` / `___` | divider | |
+| `![alt](url)` | image | 外部图片链接 |
+| `**bold**` | bold | 粗体标注 |
+| `*italic*` | italic | 斜体标注 |
+| `` `code` `` | code | 行内代码 |
+| `~~strikethrough~~` | strikethrough | 删除线 |
+| `__underline__` | underline | 下划线 |
+| `[text](url)` | link | 超链接 |
+| `$math$` | inline equation | 行内公式 |
+| `$$math$$` | equation | 块级公式 |
+| `| a | b |` | table | Markdown 表格 |
+
+---
+
 ## 同步逻辑详解
 
 ```
