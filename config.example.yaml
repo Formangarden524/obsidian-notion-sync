@@ -1,0 +1,54 @@
+# Obsidian ↔ Notion 双向同步配置模板
+# 复制此文件为 config.yaml，然后填入你的信息
+
+# === Notion 配置 ===
+notion:
+  # Notion Integration Token
+  # 获取方式：https://www.notion.so/my-integrations → New integration
+  token: "secret_你的Token"
+
+  # 要同步的数据库列表（支持多个）
+  databases:
+    - id: "你的DatabaseID"
+      # 该数据库在 Obsidian 中的子文件夹名（相对于 sync_dir）
+      sub_dir: "数据库1"
+      # 同步时排除的属性（可选）
+      excluded_properties: []
+
+    # 如果需要同步第二个数据库，取消下面注释：
+    # - id: "第二个DatabaseID"
+    #   sub_dir: "数据库2"
+    #   excluded_properties: []
+
+  # 全局排除属性（对所有数据库生效）
+  excluded_properties: []
+
+# === Obsidian 配置 ===
+obsidian:
+  # Obsidian 仓库中同步文件夹的绝对路径
+  # 示例：/Users/liurainbow/Obsidian/我的仓库/Notion-Sync
+  sync_dir: "./Notion-Sync"
+
+  # 文件名模板
+  # 可用变量：{title}（页面标题）、{id}（notion-id 前8位）
+  filename_template: "{title}"
+
+# === 同步行为配置 ===
+sync:
+  # 首次运行时，如果 Obsidian 目录为空，是否从 Notion 全量拉取
+  init_from_notion: true
+
+  # 删除策略
+  # "none" - 不删除任何文件（Notion 删除的行，Obsidian 文件保留）
+  # "soft" - 软删除（移入 sync_dir 下的 .trash 文件夹）
+  # "hard" - 硬删除（直接删除文件）
+  delete_strategy: "soft"
+
+  # 是否在 frontmatter 中追加 Notion 原页面链接
+  append_notion_link: true
+
+  # 是否在 frontmatter 中记录上次同步时间
+  track_sync_time: true
+
+  # API 请求间隔（秒），避免触发 Notion 限流
+  api_delay: 0.35
