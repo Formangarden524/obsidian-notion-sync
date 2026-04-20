@@ -8,6 +8,7 @@
 
 - ✅ **属性级双向同步**：Notion 数据库属性 ↔ Obsidian YAML frontmatter
 - ✅ **正文双向同步**：Notion blocks（段落、标题、列表、代码块等）↔ Markdown 正文
+- ✅ **图片/附件双向同步**：Notion 图片下载到本地，Obsidian 本地图片上传到 Notion
 - ✅ **时间戳冲突解决**：自动比较 `last_edited_time` 与文件 `mtime`，新的覆盖旧的
 - ✅ **首次全量初始化**：一键将 Notion 数据库拉取到 Obsidian
 - ✅ **软删除支持**：Notion 删除的行可配置为移入 `.trash` 文件夹（防误删）
@@ -26,6 +27,7 @@ obsidian_notion_sync/
 ├── notion_client.py     # Notion API 封装
 ├── obsidian_client.py   # 本地文件操作封装
 ├── blocks_converter.py  # Notion blocks ↔ Markdown 正文转换
+├── attachments_manager.py # 图片/附件下载与上传
 ├── mapper.py            # 类型映射与时间戳工具
 ├── requirements.txt     # Python 依赖
 ├── sync_state.json      # 同步状态（自动生成）
@@ -218,6 +220,7 @@ crontab -e
 | `sync.delete_strategy` | 删除策略：`none`/`soft`/`hard` | `soft` |
 | `sync.append_notion_link` | 是否在 frontmatter 追加 Notion 链接 | `true` |
 | `sync.sync_body` | 是否同步正文内容（blocks ↔ Markdown） | `true` |
+| `sync.sync_attachments` | 是否同步图片/附件 | `false` |
 | `sync.track_sync_time` | 是否记录同步时间 | `true` |
 | `sync.api_delay` | API 请求间隔（秒） | `0.35` |
 
@@ -296,6 +299,7 @@ crontab -e
 | 局限 | 说明 |
 |------|------|
 | **正文格式限制** | 复杂排版（表格、分栏、嵌入页面、数据库）转换后会简化或丢失。Obsidian 特有语法（Dataview、WikiLink）在 Notion 中会变为纯文本。 |
+| **附件同步限制** | Notion 图片 URL 为临时链接（会过期），必须开启 `sync_attachments` 下载到本地才能永久保存。Obsidian → Notion 上传需要 Integration 具备文件上传权限。 |
 | **冲突可能丢数据** | 以时间戳为准，旧版本静默覆盖。建议配合 Obsidian Git 插件做版本备份。 |
 | **删除不可逆** | `hard` 模式会直接删除文件；`soft` 模式移入 `.trash`，30 天后需手动清理。 |
 | **首次同步方向** | 默认从 Notion 拉取全量数据到 Obsidian。 |

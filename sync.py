@@ -30,6 +30,7 @@ from mapper import (
 from notion_client import NotionClient, NotionDatabaseRow
 from obsidian_client import ObsidianClient, ObsidianNote
 from blocks_converter import blocks_to_markdown, simple_markdown_to_blocks
+from attachments_manager import AttachmentsManager
 
 
 class SyncEngine:
@@ -152,7 +153,7 @@ class SyncEngine:
 
         print(f"  ⬇️  Notion → Obsidian: {filename}")
 
-    def _obsidian_to_notion(self, note: ObsidianNote, db_schema: Dict[str, str], sync_body: bool = True):
+    def _obsidian_to_notion(self, note: ObsidianNote, db_schema: Dict[str, str], sync_body: bool = True, sync_attachments: bool = False):
         """Obsidian → Notion：推送更新"""
         if not note.notion_id:
             print(f"  ⚠️  跳过（无 notion-id）: {note.filepath.name}")
@@ -175,8 +176,13 @@ class SyncEngine:
 
         # 同步正文
         body_synced = False
+        attach_synced = False
         if sync_body and note.body and note.body.strip():
-            blocks = simple_markdown_to_blocks(note.body.strip())
+            am = None
+            if sync_attachments:
+                am = AttachmentsManager(str(self.obsidian.sync_dir), self.config["notion"]["token"])
+            
+            blocks = simple_markdown_to_blocks(note.body.strip(), attachments_manager=am)
             if blocks:
                 body_success = self.notion.update_page_content(note.notion_id, blocks)
                 if body_success:
@@ -192,7 +198,8 @@ class SyncEngine:
                 self.obsidian.set_file_mtime(note.filepath, new_ts)
 
         body_info = " (含正文)" if body_synced else ""
-        print(f"  ⬆️  Obsidian → Notion: {note.filepath.name}{body_info}")
+        attach_info = "+附件" if sync_attachments else ""
+        print(f"  ⬆️  Obsidian → Notion: {note.filepath.name}{body_info}{attach_info}")
 
     def _compare_and_sync(self, row: NotionDatabaseRow, note: Optional[ObsidianNote]) -> str:
         """
@@ -336,10 +343,10 @@ class SyncEngine:
         threshold = 5
 
         if notion_ts > obsidian_ts + threshold:
-            self._notion_to_obsidian(row, excluded, note, sync_body=sync_body)
+            self._notion_to_obsidian(row, excluded, note, sync_body=sync_body, sync_attachments=sync_attachments)
             return "notion"
         elif obsidian_ts > notion_ts + threshold:
-            self._obsidian_to_notion(note, db_schema, sync_body=sync_body)
+            self._obsidian_to_notion(note, db_schema, sync_body=sync_body, sync_attachments=sync_attachments)
             return "obsidian"
         else:
             return "skip"
@@ -350,6 +357,7 @@ class SyncEngine:
         excluded: List[str],
         existing_note: Optional[ObsidianNote] = None,
         sync_body: bool = True,
+        sync_attachments: bool = False,
     ):
         """Notion → Obsidian：拉取更新（使用传入的 excluded 列表）"""
         title = row.get_title()
@@ -368,8 +376,15 @@ class SyncEngine:
         if sync_body:
             blocks = self.notion.get_page_blocks(row.id)
             if blocks:
-                new_body = blocks_to_markdown(blocks)
-                # 去除首尾空行
+                # 下载附件
+                url_map = {}
+                if sync_attachments:
+                    am = AttachmentsManager(str(self.obsidian.sync_dir), self.config["notion"]["token"])
+                    url_map = am.download_all_from_blocks(blocks)
+                    if url_map:
+                        print(f"     📎 已下载 {len(url_map)} 个附件")
+                
+                new_body = blocks_to_markdown(blocks, url_map=url_map)
                 new_body = new_body.strip()
 
         # 如果已有文件且不同步正文，保留原有正文
@@ -380,7 +395,7 @@ class SyncEngine:
             filename=filename,
             metadata=metadata,
             body=new_body,
-            preserve_existing_body=False,  # 我们已自行处理正文合并
+            preserve_existing_body=False,
         )
 
         notion_ts = row.get_last_edited_timestamp()
@@ -389,7 +404,8 @@ class SyncEngine:
 
         self.state["notion_to_file"][row.id] = str(filepath.relative_to(Path(self.base_sync_dir)))
         body_info = " (含正文)" if sync_body and new_body else ""
-        print(f"  ⬇️  Notion → Obsidian: {filename}{body_info}")
+        attach_info = "+附件" if sync_attachments else ""
+        print(f"  ⬇️  Notion → Obsidian: {filename}{body_info}{attach_info}")
 
     def run(self):
         """执行完整同步流程（支持多数据库）"""

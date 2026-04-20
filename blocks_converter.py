@@ -72,10 +72,19 @@ def rich_text_to_markdown(rich_texts: List[Dict[str, Any]], escape: bool = False
 
 # ==================== Notion Block → Markdown ====================
 
-def block_to_markdown(block: Dict[str, Any], indent: str = "") -> str:
+def block_to_markdown(
+    block: Dict[str, Any],
+    indent: str = "",
+    url_map: Optional[Dict[str, str]] = None,
+) -> str:
     """将单个 Notion block 转为 Markdown 字符串"""
     block_type = block.get("type", "")
     content = block.get(block_type, {})
+    url_map = url_map or {}
+    
+    def resolve_url(url: str) -> str:
+        """如果 url 在映射中，返回本地路径"""
+        return url_map.get(url, url)
     
     if block_type == "paragraph":
         text = rich_text_to_markdown(content.get("rich_text", []))
@@ -98,7 +107,7 @@ def block_to_markdown(block: Dict[str, Any], indent: str = "") -> str:
         children = block.get("children", [])
         md = f"{indent}- {text}\n"
         if children:
-            md += blocks_to_markdown(children, indent + "  ")
+            md += blocks_to_markdown(children, indent + "  ", url_map=url_map)
         return md
     
     elif block_type == "numbered_list_item":
@@ -106,7 +115,7 @@ def block_to_markdown(block: Dict[str, Any], indent: str = "") -> str:
         children = block.get("children", [])
         md = f"{indent}1. {text}\n"
         if children:
-            md += blocks_to_markdown(children, indent + "  ")
+            md += blocks_to_markdown(children, indent + "  ", url_map=url_map)
         return md
     
     elif block_type == "to_do":
@@ -116,7 +125,7 @@ def block_to_markdown(block: Dict[str, Any], indent: str = "") -> str:
         children = block.get("children", [])
         md = f"{indent}- [{mark}] {text}\n"
         if children:
-            md += blocks_to_markdown(children, indent + "  ")
+            md += blocks_to_markdown(children, indent + "  ", url_map=url_map)
         return md
     
     elif block_type == "quote":
@@ -126,7 +135,7 @@ def block_to_markdown(block: Dict[str, Any], indent: str = "") -> str:
         children = block.get("children", [])
         md = f"{quoted}\n"
         if children:
-            md += blocks_to_markdown(children, indent + "> ")
+            md += blocks_to_markdown(children, indent + "> ", url_map=url_map)
         return md + "\n"
     
     elif block_type == "code":
@@ -147,6 +156,7 @@ def block_to_markdown(block: Dict[str, Any], indent: str = "") -> str:
             img_url = content["file"].get("url", "")
         
         if img_url:
+            img_url = resolve_url(img_url)
             return f"{indent}![{caption}]({img_url})\n\n"
         return ""
     
@@ -154,7 +164,6 @@ def block_to_markdown(block: Dict[str, Any], indent: str = "") -> str:
         text = rich_text_to_markdown(content.get("rich_text", []))
         icon = content.get("icon", {})
         emoji = icon.get("emoji", "💡")
-        color = content.get("color", "default")
         lines = text.split("\n")
         quoted = "\n".join(f"{indent}> {line}" for line in lines)
         return f"{indent}> {emoji} **Callout**\n{quoted}\n\n"
@@ -162,7 +171,7 @@ def block_to_markdown(block: Dict[str, Any], indent: str = "") -> str:
     elif block_type == "toggle":
         text = rich_text_to_markdown(content.get("rich_text", []))
         children = block.get("children", [])
-        child_md = blocks_to_markdown(children, indent + "  ")
+        child_md = blocks_to_markdown(children, indent + "  ", url_map=url_map)
         return f"{indent}<details>\n{indent}<summary>{text}</summary>\n\n{child_md}{indent}</details>\n\n"
     
     elif block_type == "bookmark":
@@ -189,7 +198,7 @@ def block_to_markdown(block: Dict[str, Any], indent: str = "") -> str:
         for col in children:
             if col.get("type") == "column":
                 col_children = col.get("children", [])
-                col_md = blocks_to_markdown(col_children, indent + "  ")
+                col_md = blocks_to_markdown(col_children, indent + "  ", url_map=url_map)
                 md_parts.append(f"{indent}<!-- column -->\n{col_md}")
         md_parts.append(f"{indent}<!-- /column_list -->\n\n")
         return "".join(md_parts)
@@ -204,6 +213,8 @@ def block_to_markdown(block: Dict[str, Any], indent: str = "") -> str:
             url = content["external"].get("url", "")
         elif "file" in content:
             url = content["file"].get("url", "")
+        if url:
+            url = resolve_url(url)
         return f"{indent}[Video: {url}]({url})\n\n"
     
     elif block_type == "file":
@@ -214,6 +225,8 @@ def block_to_markdown(block: Dict[str, Any], indent: str = "") -> str:
         elif "file" in content:
             url = content["file"].get("url", "")
             name = content["file"].get("name", "File")
+        if url:
+            url = resolve_url(url)
         return f"{indent}[File: {name}]({url})\n\n"
     
     elif block_type == "pdf":
@@ -222,6 +235,8 @@ def block_to_markdown(block: Dict[str, Any], indent: str = "") -> str:
             url = content["external"].get("url", "")
         elif "file" in content:
             url = content["file"].get("url", "")
+        if url:
+            url = resolve_url(url)
         return f"{indent}[PDF]({url})\n\n"
     
     elif block_type == "link_preview":
@@ -269,7 +284,12 @@ def table_block_to_markdown(block: Dict[str, Any], indent: str = "") -> str:
     return indent + ("\n" + indent).join(rows_md) + "\n\n"
 
 
-def blocks_to_markdown(blocks: List[Dict[str, Any]], indent: str = "") -> str:
+def blocks_to_markdown(
+    blocks: List[Dict[str, Any]],
+    indent: str = "",
+    attachments_manager = None,
+    url_map: Optional[Dict[str, str]] = None,
+) -> str:
     """将 Notion blocks 数组转为完整 Markdown 字符串"""
     parts = []
     i = 0
@@ -285,12 +305,12 @@ def blocks_to_markdown(blocks: List[Dict[str, Any]], indent: str = "") -> str:
                 list_blocks.append(blocks[j])
                 j += 1
             for lb in list_blocks:
-                parts.append(block_to_markdown(lb, indent))
+                parts.append(block_to_markdown(lb, indent, url_map))
             parts.append("\n")
             i = j
             continue
         
-        parts.append(block_to_markdown(block, indent))
+        parts.append(block_to_markdown(block, indent, url_map))
         i += 1
     
     return "".join(parts)
@@ -375,10 +395,14 @@ def format_inline_with_annotations(content: str) -> List[Dict[str, Any]]:
     return result if result else [{"type": "text", "text": {"content": content}}]
 
 
-def simple_markdown_to_blocks(markdown_text: str) -> List[Dict[str, Any]]:
+def simple_markdown_to_blocks(
+    markdown_text: str,
+    attachments_manager = None,
+) -> List[Dict[str, Any]]:
     """
     简化版 Markdown → Notion blocks
     按行解析，支持绝大多数常见场景
+    如果传入 attachments_manager，会自动上传本地图片到 Notion
     """
     blocks = []
     lines = markdown_text.split('\n')
@@ -533,17 +557,38 @@ def simple_markdown_to_blocks(markdown_text: str) -> List[Dict[str, Any]]:
             })
             continue
         
-        # 图片
+        # 图片（支持本地文件自动上传）
         img_match = re.match(r'^!\[([^\]]*)\]\(([^)]+)\)$', stripped)
         if img_match:
-            blocks.append({
-                "object": "block",
-                "type": "image",
-                "image": {
-                    "external": {"url": img_match.group(2)},
-                    "caption": format_inline_with_annotations(img_match.group(1))
-                }
-            })
+            alt = img_match.group(1)
+            path = img_match.group(2)
+            
+            file_obj = None
+            # 本地图片路径，尝试上传
+            if attachments_manager and not path.startswith(("http://", "https://", "data:")):
+                file_obj = attachments_manager.upload_image(path)
+            
+            if file_obj:
+                blocks.append({
+                    "object": "block",
+                    "type": "image",
+                    "image": {
+                        "type": "file",
+                        "file": file_obj,
+                        "caption": format_inline_with_annotations(alt)
+                    }
+                })
+            else:
+                # 外部 URL 或上传失败，使用 external
+                blocks.append({
+                    "object": "block",
+                    "type": "image",
+                    "image": {
+                        "type": "external",
+                        "external": {"url": path},
+                        "caption": format_inline_with_annotations(alt)
+                    }
+                })
             i += 1
             continue
         

@@ -52,6 +52,12 @@ sync:
   # false: 只同步 frontmatter ↔ properties
   sync_body: true
 
+  # 是否同步图片/附件
+  # true: 下载 Notion 图片到本地 attachments/，上传 Obsidian 本地图片到 Notion
+  # false: 图片只保留原始 URL 链接
+  # 注意：首次同步大量图片时可能较慢
+  sync_attachments: false
+
   # 是否在 frontmatter 中记录上次同步时间
   track_sync_time: true
 
