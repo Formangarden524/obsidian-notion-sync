@@ -47,6 +47,11 @@ sync:
   # 是否在 frontmatter 中追加 Notion 原页面链接
   append_notion_link: true
 
+  # 是否同步正文内容（Notion blocks ↔ Markdown body）
+  # true: 双向同步标题、段落、列表、代码块等
+  # false: 只同步 frontmatter ↔ properties
+  sync_body: true
+
   # 是否在 frontmatter 中记录上次同步时间
   track_sync_time: true
 

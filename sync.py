@@ -29,6 +29,7 @@ from mapper import (
 )
 from notion_client import NotionClient, NotionDatabaseRow
 from obsidian_client import ObsidianClient, ObsidianNote
+from blocks_converter import blocks_to_markdown, simple_markdown_to_blocks
 
 
 class SyncEngine:
@@ -151,7 +152,7 @@ class SyncEngine:
 
         print(f"  ⬇️  Notion → Obsidian: {filename}")
 
-    def _obsidian_to_notion(self, note: ObsidianNote, db_schema: Dict[str, str]):
+    def _obsidian_to_notion(self, note: ObsidianNote, db_schema: Dict[str, str], sync_body: bool = True):
         """Obsidian → Notion：推送更新"""
         if not note.notion_id:
             print(f"  ⚠️  跳过（无 notion-id）: {note.filepath.name}")
@@ -165,20 +166,33 @@ class SyncEngine:
             properties.pop(key, None)
             properties.pop(key.replace("-", " "), None)
 
-        # 更新 Notion
+        # 更新 Notion 属性
         success = self.notion.update_page_properties(note.notion_id, properties)
 
-        if success:
-            # 获取更新后的页面时间戳，对齐本地文件
-            updated_page = self.notion.get_page(note.notion_id)
-            if updated_page:
-                new_ts = iso_to_timestamp(updated_page.get("last_edited_time", ""))
-                if new_ts > 0:
-                    self.obsidian.set_file_mtime(note.filepath, new_ts)
+        if not success:
+            print(f"  ❌ 推送属性失败: {note.filepath.name}")
+            return
 
-            print(f"  ⬆️  Obsidian → Notion: {note.filepath.name}")
-        else:
-            print(f"  ❌ 推送失败: {note.filepath.name}")
+        # 同步正文
+        body_synced = False
+        if sync_body and note.body and note.body.strip():
+            blocks = simple_markdown_to_blocks(note.body.strip())
+            if blocks:
+                body_success = self.notion.update_page_content(note.notion_id, blocks)
+                if body_success:
+                    body_synced = True
+                else:
+                    print(f"  ⚠️  正文同步失败: {note.filepath.name}")
+
+        # 获取更新后的页面时间戳，对齐本地文件
+        updated_page = self.notion.get_page(note.notion_id)
+        if updated_page:
+            new_ts = iso_to_timestamp(updated_page.get("last_edited_time", ""))
+            if new_ts > 0:
+                self.obsidian.set_file_mtime(note.filepath, new_ts)
+
+        body_info = " (含正文)" if body_synced else ""
+        print(f"  ⬆️  Obsidian → Notion: {note.filepath.name}{body_info}")
 
     def _compare_and_sync(self, row: NotionDatabaseRow, note: Optional[ObsidianNote]) -> str:
         """
@@ -312,19 +326,20 @@ class SyncEngine:
     ) -> str:
         """比较并同步单个行（使用传入的 schema）"""
         notion_ts = row.get_last_edited_timestamp()
+        sync_body = self.config["sync"].get("sync_body", True)
 
         if not note:
-            self._notion_to_obsidian(row, excluded, note)
+            self._notion_to_obsidian(row, excluded, note, sync_body=sync_body)
             return "new"
 
         obsidian_ts = note.get_last_edited_timestamp()
         threshold = 5
 
         if notion_ts > obsidian_ts + threshold:
-            self._notion_to_obsidian(row, excluded, note)
+            self._notion_to_obsidian(row, excluded, note, sync_body=sync_body)
             return "notion"
         elif obsidian_ts > notion_ts + threshold:
-            self._obsidian_to_notion(note, db_schema)
+            self._obsidian_to_notion(note, db_schema, sync_body=sync_body)
             return "obsidian"
         else:
             return "skip"
@@ -334,6 +349,7 @@ class SyncEngine:
         row: NotionDatabaseRow,
         excluded: List[str],
         existing_note: Optional[ObsidianNote] = None,
+        sync_body: bool = True,
     ):
         """Notion → Obsidian：拉取更新（使用传入的 excluded 列表）"""
         title = row.get_title()
@@ -347,15 +363,24 @@ class SyncEngine:
 
         metadata = self._build_frontmatter(row, excluded)
 
-        existing_body = ""
-        if existing_note:
-            existing_body = existing_note.body
+        # 获取正文内容
+        new_body = ""
+        if sync_body:
+            blocks = self.notion.get_page_blocks(row.id)
+            if blocks:
+                new_body = blocks_to_markdown(blocks)
+                # 去除首尾空行
+                new_body = new_body.strip()
+
+        # 如果已有文件且不同步正文，保留原有正文
+        if existing_note and not sync_body:
+            new_body = existing_note.body
 
         filepath = self.obsidian.write_file(
             filename=filename,
             metadata=metadata,
-            body=existing_body,
-            preserve_existing_body=True,
+            body=new_body,
+            preserve_existing_body=False,  # 我们已自行处理正文合并
         )
 
         notion_ts = row.get_last_edited_timestamp()
@@ -363,7 +388,8 @@ class SyncEngine:
             self.obsidian.set_file_mtime(filepath, notion_ts)
 
         self.state["notion_to_file"][row.id] = str(filepath.relative_to(Path(self.base_sync_dir)))
-        print(f"  ⬇️  Notion → Obsidian: {filename}")
+        body_info = " (含正文)" if sync_body and new_body else ""
+        print(f"  ⬇️  Notion → Obsidian: {filename}{body_info}")
 
     def run(self):
         """执行完整同步流程（支持多数据库）"""

@@ -122,6 +122,50 @@ class NotionClient:
 
         return blocks
 
+    def clear_page_blocks(self, page_id: str) -> bool:
+        """清空页面的所有 blocks（为更新正文做准备）"""
+        try:
+            blocks = self.get_page_blocks(page_id)
+            for block in blocks:
+                self._delay()
+                try:
+                    self.client.blocks.delete(block_id=block["id"])
+                except APIResponseError:
+                    pass
+            return True
+        except Exception as e:
+            print(f"❌ 清空页面内容失败: {e}")
+            return False
+
+    def append_page_blocks(self, page_id: str, blocks: List[Dict]) -> bool:
+        """向页面追加 blocks（每次最多 100 个，自动分批）"""
+        if not blocks:
+            return True
+
+        batch_size = 100
+        total = len(blocks)
+        success = True
+
+        for i in range(0, total, batch_size):
+            batch = blocks[i:i + batch_size]
+            self._delay()
+            try:
+                self.client.blocks.children.append(
+                    block_id=page_id,
+                    children=batch,
+                )
+            except APIResponseError as e:
+                print(f"❌ 追加 blocks 失败 ({i+1}-{min(i+batch_size, total)}): {e}")
+                success = False
+
+        return success
+
+    def update_page_content(self, page_id: str, blocks: List[Dict]) -> bool:
+        """更新页面正文：先清空再追加"""
+        if not self.clear_page_blocks(page_id):
+            return False
+        return self.append_page_blocks(page_id, blocks)
+
 
 class NotionDatabaseRow:
     """Notion 数据库行的包装对象，便于访问"""
