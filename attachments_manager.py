@@ -103,9 +103,10 @@ class AttachmentsManager:
                 return f"attachments/{filename}"
 
         try:
+            # S3 预签名 URL 自带认证参数，不能添加 Authorization header
+            # 只有 Notion API 端点才需要 token
             headers = {}
-            # Notion 托管的文件需要 Authorization
-            if "notion.so" in url or "amazonaws.com" in url:
+            if "api.notion.so" in url:
                 headers["Authorization"] = f"Bearer {self.token}"
 
             resp = requests.get(url, headers=headers, timeout=30)

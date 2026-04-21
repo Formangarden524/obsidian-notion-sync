@@ -334,9 +334,10 @@ class SyncEngine:
         """比较并同步单个行（使用传入的 schema）"""
         notion_ts = row.get_last_edited_timestamp()
         sync_body = self.config["sync"].get("sync_body", True)
+        sync_attachments = self.config["sync"].get("sync_attachments", False)
 
         if not note:
-            self._notion_to_obsidian(row, excluded, note, sync_body=sync_body)
+            self._notion_to_obsidian(row, excluded, note, sync_body=sync_body, sync_attachments=sync_attachments)
             return "new"
 
         obsidian_ts = note.get_last_edited_timestamp()
