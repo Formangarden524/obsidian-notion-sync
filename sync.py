@@ -27,8 +27,8 @@ from mapper import (
     timestamp_to_iso,
     sanitize_filename,
 )
-from notion_client import NotionClient, NotionDatabaseRow
-from obsidian_client import ObsidianClient, ObsidianNote
+from notion_api import NotionClient, NotionDatabaseRow
+from obsidian_fs import ObsidianClient, ObsidianNote
 from blocks_converter import blocks_to_markdown, simple_markdown_to_blocks
 from attachments_manager import AttachmentsManager
 
